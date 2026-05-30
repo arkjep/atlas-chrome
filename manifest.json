@@ -4,6 +4,7 @@
   "description": "Create an ATLAS task from selected browser text and the current page URL.",
   "version": "0.1.0",
   "action": {
+    "default_popup": "src/popup.html",
     "default_title": "Create ATLAS task from selection"
   },
   "background": {
