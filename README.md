@@ -8,7 +8,7 @@ Chrome extension for creating ATLAS tasks from selected text in the browser.
 2. Open Chrome and go to `chrome://extensions`.
 3. Enable **Developer mode**.
 4. Click **Load unpacked**.
-5. Select the cloned `atlas-chrome` repository folder.
+5. Select the cloned `atlas-chrome` repository folder. The loaded extension should show version `0.1.1` or newer.
 6. Open the extension options and set:
    - ATLAS API URL, for example `https://atlas-api.arktechnology.dev`
    - ATLAS API token, the bearer token used by the ATLAS API

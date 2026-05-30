@@ -208,6 +208,7 @@ zapButton.addEventListener("click", async () => {
 
 async function init() {
   settings = await storageGet(["apiBaseUrl", "authToken", "selectedClientId"]);
+  status.textContent = settings.authToken ? "" : "Set your API token in extension options.";
   await loadClients();
 }
 
