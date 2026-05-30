@@ -12,6 +12,7 @@
   "options_page": "src/options.html",
   "permissions": [
     "activeTab",
+    "clipboardRead",
     "scripting",
     "storage"
   ],

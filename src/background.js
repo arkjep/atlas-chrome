@@ -36,10 +36,46 @@ async function badge(tabId, text, color) {
 async function selectedPageContext(tabId) {
   const [result] = await chrome.scripting.executeScript({
     target: { tabId },
-    func: () => ({
-      selectedText: String(window.getSelection()?.toString() || "").trim(),
-      pageTitle: document.title || ""
-    })
+    func: async () => {
+      const pageTitle = document.title || "";
+      const selectedText = String(window.getSelection()?.toString() || "").trim();
+
+      if (selectedText) {
+        return {
+          selectedText,
+          pageTitle,
+          selectionMethod: "dom"
+        };
+      }
+
+      try {
+        const copied = document.execCommand("copy");
+
+        if (!copied) {
+          return {
+            selectedText: "",
+            pageTitle,
+            selectionMethod: "clipboard",
+            selectionError: "The page did not expose a copyable selection."
+          };
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 80));
+
+        return {
+          selectedText: String(await navigator.clipboard.readText()).trim(),
+          pageTitle,
+          selectionMethod: "clipboard"
+        };
+      } catch (error) {
+        return {
+          selectedText: "",
+          pageTitle,
+          selectionMethod: "clipboard",
+          selectionError: error instanceof Error ? error.message : String(error || "Unable to read copied selection.")
+        };
+      }
+    }
   });
 
   return result?.result || { selectedText: "", pageTitle: "" };
@@ -62,6 +98,10 @@ async function createAtlasTask(tab) {
   const context = await selectedPageContext(tab.id);
 
   if (!context.selectedText) {
+    if (context.selectionError) {
+      throw new Error(`Select text on the page before clicking the ATLAS extension. ${context.selectionError}`);
+    }
+
     throw new Error("Select text on the page before clicking the ATLAS extension.");
   }
 

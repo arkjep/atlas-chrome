@@ -17,6 +17,8 @@ Chrome extension for creating ATLAS tasks from selected text in the browser.
 
 Select text on any `http` or `https` page, then click the ATLAS extension icon. The extension sends the selected text, page title, captured timestamp, and browser URL to ATLAS.
 
+For canvas-style editors such as Google Docs and Google Slides, Chrome may not expose the selection through normal page APIs. In that case the extension falls back to the page's copy behavior, then reads the clipboard text. This makes Docs/Slides selections work, but it also means the selected text becomes your clipboard contents.
+
 ATLAS must expose `POST /browser/tasks`, which creates the task from the captured page context.
 
 ## Development
