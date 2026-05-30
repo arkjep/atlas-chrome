@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ATLAS Task Clipper Options</title>
+    <link rel="stylesheet" href="options.css">
+  </head>
+  <body>
+    <main>
+      <h1>ATLAS Task Clipper</h1>
+      <form id="settings-form">
+        <label>
+          ATLAS API URL
+          <input id="api-base-url" name="apiBaseUrl" placeholder="https://atlas-api.arktechnology.dev" type="url">
+        </label>
+        <label>
+          ATLAS API token
+          <input id="auth-token" name="authToken" autocomplete="off" spellcheck="false" type="password">
+        </label>
+        <button type="submit">Save</button>
+      </form>
+      <p id="status" role="status"></p>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>

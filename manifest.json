@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "ATLAS Task Clipper",
+  "description": "Create an ATLAS task from selected browser text and the current page URL.",
+  "version": "0.1.0",
+  "action": {
+    "default_title": "Create ATLAS task from selection"
+  },
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "options_page": "src/options.html",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "http://localhost:4000/*",
+    "https://atlas-api.arktechnology.dev/*"
+  ]
+}

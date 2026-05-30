@@ -1,0 +1,10 @@
+{
+  "name": "atlas-chrome",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "echo 'Load this repository root as an unpacked Chrome extension; no build needed.'",
+    "typecheck": "echo 'Chrome extension is plain Manifest V3 JavaScript; no local typecheck needed.'"
+  }
+}
