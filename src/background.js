@@ -8,6 +8,23 @@ function storageGet(keys) {
   return chrome.storage.sync.get(keys);
 }
 
+function storageSet(values) {
+  return chrome.storage.sync.set(values);
+}
+
+function errorMessage(error) {
+  return error instanceof Error ? error.message : String(error || "Unknown ATLAS extension error.");
+}
+
+async function rememberLastResult(result) {
+  await storageSet({
+    lastResult: {
+      ...result,
+      at: new Date().toISOString()
+    }
+  });
+}
+
 async function badge(tabId, text, color) {
   await chrome.action.setBadgeBackgroundColor({ tabId, color });
   await chrome.action.setBadgeText({ tabId, text });
@@ -35,6 +52,7 @@ async function createAtlasTask(tab) {
 
   const settings = await storageGet(["apiBaseUrl", "authToken"]);
   const authToken = String(settings.authToken || "").trim();
+  const apiBaseUrl = normalizeApiBaseUrl(settings.apiBaseUrl);
 
   if (!authToken) {
     await chrome.runtime.openOptionsPage();
@@ -47,19 +65,26 @@ async function createAtlasTask(tab) {
     throw new Error("Select text on the page before clicking the ATLAS extension.");
   }
 
-  const response = await fetch(`${normalizeApiBaseUrl(settings.apiBaseUrl)}/browser/tasks`, {
-    method: "POST",
-    headers: {
-      "authorization": `Bearer ${authToken}`,
-      "content-type": "application/json"
-    },
-    body: JSON.stringify({
-      url: tab.url,
-      pageTitle: context.pageTitle,
-      selectedText: context.selectedText,
-      capturedAt: new Date().toISOString()
-    })
-  });
+  let response;
+
+  try {
+    response = await fetch(`${apiBaseUrl}/browser/tasks`, {
+      method: "POST",
+      headers: {
+        "authorization": `Bearer ${authToken}`,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        url: tab.url,
+        pageTitle: context.pageTitle,
+        selectedText: context.selectedText,
+        capturedAt: new Date().toISOString()
+      })
+    });
+  } catch (error) {
+    throw new Error(`Could not reach ATLAS at ${apiBaseUrl}. ${errorMessage(error)}`);
+  }
+
   const body = await response.json().catch(() => ({}));
 
   if (!response.ok || !body.task) {
@@ -82,10 +107,26 @@ chrome.action.onClicked.addListener(async (tab) => {
 
   try {
     await badge(tab.id, "...", "#2f6fed");
-    await createAtlasTask(tab);
+    const task = await createAtlasTask(tab);
+    await chrome.action.setTitle({ tabId: tab.id, title: `Created ATLAS task: ${task.title || task.id}` });
+    await rememberLastResult({
+      ok: true,
+      message: `Created ATLAS task: ${task.title || task.id}`,
+      taskId: task.id,
+      taskTitle: task.title,
+      pageUrl: tab.url
+    });
     await badge(tab.id, "OK", "#15803d");
   } catch (error) {
-    console.error(error);
+    const message = errorMessage(error);
+    console.error("ATLAS task creation failed:", error);
+    await chrome.action.setTitle({ tabId: tab.id, title: `ATLAS error: ${message}` });
+    await rememberLastResult({
+      ok: false,
+      message,
+      pageUrl: tab.url
+    });
     await badge(tab.id, "ERR", "#b91c1c");
+    await chrome.runtime.openOptionsPage();
   }
 });
