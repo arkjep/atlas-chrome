@@ -139,7 +139,6 @@ async function createTask() {
   }
 
   if (!settings.authToken) {
-    await chrome.runtime.openOptionsPage();
     throw new Error("Set your ATLAS API token in extension options.");
   }
 
