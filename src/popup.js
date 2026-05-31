@@ -8,6 +8,7 @@ const status = document.querySelector("#status");
 
 let settings = {};
 let clients = [];
+let pendingCapture = null;
 let selectedClientIndex = 0;
 
 function normalizeApiBaseUrl(value) {
@@ -33,11 +34,6 @@ async function rememberLastResult(result) {
       at: new Date().toISOString()
     }
   });
-}
-
-async function activeTab() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  return tab;
 }
 
 function clientInitials(client) {
@@ -93,61 +89,13 @@ async function loadClients() {
   renderClient();
 }
 
-async function selectedPageContext(tabId) {
-  const [result] = await chrome.scripting.executeScript({
-    target: { tabId },
-    func: async () => {
-      const pageTitle = document.title || "";
-      const selectedText = String(window.getSelection()?.toString() || "").trim();
-
-      if (selectedText) {
-        return { selectedText, pageTitle };
-      }
-
-      try {
-        const copied = document.execCommand("copy");
-
-        if (!copied) {
-          return {
-            selectedText: "",
-            pageTitle,
-            selectionError: "The page did not expose a copyable selection."
-          };
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, 80));
-        return {
-          selectedText: String(await navigator.clipboard.readText()).trim(),
-          pageTitle
-        };
-      } catch (error) {
-        return {
-          selectedText: "",
-          pageTitle,
-          selectionError: error instanceof Error ? error.message : String(error || "Unable to read copied selection.")
-        };
-      }
-    }
-  });
-
-  return result?.result || { selectedText: "", pageTitle: "" };
-}
-
 async function createTask() {
-  const tab = await activeTab();
-
-  if (!tab?.id || !tab.url || !/^https?:\/\//i.test(tab.url)) {
-    throw new Error("Open an http or https page before creating an ATLAS task.");
-  }
-
   if (!settings.authToken) {
     throw new Error("Set your ATLAS API token in extension options.");
   }
 
-  const context = await selectedPageContext(tab.id);
-
-  if (!context.selectedText) {
-    throw new Error(context.selectionError || "Select text on the page before creating an ATLAS task.");
+  if (!pendingCapture?.selectedText) {
+    throw new Error(pendingCapture?.selectionError || "Select text on the page before creating an ATLAS task.");
   }
 
   const client = clients[selectedClientIndex] || null;
@@ -158,11 +106,11 @@ async function createTask() {
       "content-type": "application/json"
     },
     body: JSON.stringify({
-      url: tab.url,
-      pageTitle: context.pageTitle,
-      selectedText: context.selectedText,
+      url: pendingCapture.url,
+      pageTitle: pendingCapture.pageTitle,
+      selectedText: pendingCapture.selectedText,
       clientId: client?.id || undefined,
-      capturedAt: new Date().toISOString()
+      capturedAt: pendingCapture.capturedAt || new Date().toISOString()
     })
   });
   const body = await response.json().catch(() => ({}));
@@ -176,7 +124,7 @@ async function createTask() {
     message: `Created ATLAS task: ${body.task.title || body.task.id}`,
     taskId: body.task.id,
     taskTitle: body.task.title,
-    pageUrl: tab.url
+    pageUrl: pendingCapture.url
   });
 
   return body.task;
@@ -209,8 +157,13 @@ zapButton.addEventListener("click", async () => {
 });
 
 async function init() {
-  settings = await storageGet(["apiBaseUrl", "authToken", "selectedClientId"]);
+  const stored = await storageGet(["apiBaseUrl", "authToken", "selectedClientId", "pendingCapture"]);
+  settings = stored;
+  pendingCapture = stored.pendingCapture || null;
   status.textContent = settings.authToken ? "" : "Set token in options.";
+  if (pendingCapture?.selectionError) {
+    status.textContent = pendingCapture.selectionError;
+  }
   await loadClients();
 }
 

@@ -4,7 +4,6 @@
   "description": "Create an ATLAS task from selected browser text and the current page URL.",
   "version": "0.1.1",
   "action": {
-    "default_popup": "popup.html",
     "default_icon": {
       "128": "assets/logo.png"
     },
@@ -21,8 +20,7 @@
     "activeTab",
     "clipboardRead",
     "scripting",
-    "storage",
-    "tabs"
+    "storage"
   ],
   "host_permissions": [
     "http://localhost:4000/*",

@@ -45,8 +45,8 @@ button {
 }
 
 .client-button {
-  background: #090f17;
-  border: 1px solid #243241;
+  background: linear-gradient(180deg, #101926, #090f17);
+  border: 1px solid #334759;
   color: #edf7ff;
 }
 
@@ -59,17 +59,17 @@ button {
 
 .client-icon {
   align-items: center;
-  background: #111a24;
-  border-radius: 8px;
+  background: transparent;
+  border-radius: 9px;
   color: #edf7ff;
   display: inline-flex;
   font-size: 12px;
   font-weight: 800;
-  height: 30px;
+  height: 34px;
   justify-content: center;
   overflow: hidden;
   text-transform: uppercase;
-  width: 30px;
+  width: 34px;
 }
 
 .client-icon img {
@@ -98,9 +98,12 @@ button {
 }
 
 .zap-button svg {
-  fill: currentColor;
-  height: 22px;
-  width: 22px;
+  fill: none;
+  height: 24px;
+  stroke: currentColor;
+  stroke-linejoin: round;
+  stroke-width: 1.9;
+  width: 24px;
 }
 
 #status {
