@@ -23,6 +23,24 @@ function storageSet(values) {
   return chrome.storage.sync.set(values);
 }
 
+function localStorageGet(keys) {
+  return chrome.storage.local.get(keys);
+}
+
+function localStorageRemove(keys) {
+  return chrome.storage.local.remove(keys);
+}
+
+async function requestFreshCapture() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+  if (!tab?.id) {
+    return;
+  }
+
+  await chrome.tabs.sendMessage(tab.id, { type: "atlas:capture-selection" }).catch(() => {});
+}
+
 function errorMessage(error) {
   return error instanceof Error ? error.message : String(error || "Unknown ATLAS extension error.");
 }
@@ -126,6 +144,7 @@ async function createTask() {
     taskTitle: body.task.title,
     pageUrl: pendingCapture.url
   });
+  await localStorageRemove(["pendingCapture"]);
 
   return body.task;
 }
@@ -157,12 +176,16 @@ zapButton.addEventListener("click", async () => {
 });
 
 async function init() {
-  const stored = await storageGet(["apiBaseUrl", "authToken", "selectedClientId", "pendingCapture"]);
+  await requestFreshCapture();
+  const [stored, local] = await Promise.all([
+    storageGet(["apiBaseUrl", "authToken", "selectedClientId"]),
+    localStorageGet(["pendingCapture"])
+  ]);
   settings = stored;
-  pendingCapture = stored.pendingCapture || null;
+  pendingCapture = local.pendingCapture || null;
   status.textContent = settings.authToken ? "" : "Set token in options.";
-  if (pendingCapture?.selectionError) {
-    status.textContent = pendingCapture.selectionError;
+  if (!pendingCapture?.selectedText && settings.authToken) {
+    status.textContent = "Select text, then open ATLAS.";
   }
   await loadClients();
 }
