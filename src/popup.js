@@ -304,8 +304,7 @@ async function createTask() {
     pageTitle: pendingCapture.pageTitle,
     selectedText: pendingCapture.selectedText,
     clientId,
-    clientName: client?.name || undefined,
-    capturedAt: pendingCapture.capturedAt || new Date().toISOString()
+    clientName: client?.name || undefined
   };
 
   logCaptureDebug("create-task", {
@@ -313,7 +312,6 @@ async function createTask() {
     selectionMethod: pendingCapture.selectionMethod,
     pageTitle: requestBody.pageTitle,
     url: requestBody.url,
-    capturedAt: requestBody.capturedAt,
     clientId: requestBody.clientId,
     clientName: requestBody.clientName || ""
   });

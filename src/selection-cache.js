@@ -20,6 +20,38 @@ function topTitle() {
   }
 }
 
+function extensionStorageLocal() {
+  try {
+    return chrome?.storage?.local || null;
+  } catch {
+    return null;
+  }
+}
+
+function safeLocalSet(values) {
+  try {
+    extensionStorageLocal()?.set(values)?.catch(() => {});
+  } catch {
+    // Existing pages can retain stale content scripts after the extension reloads.
+  }
+}
+
+function safeLocalGet(keys) {
+  try {
+    return extensionStorageLocal()?.get(keys) || Promise.resolve({});
+  } catch {
+    return Promise.resolve({});
+  }
+}
+
+function safeLocalRemove(keys) {
+  try {
+    extensionStorageLocal()?.remove(keys)?.catch(() => {});
+  } catch {
+    // Existing pages can retain stale content scripts after the extension reloads.
+  }
+}
+
 function storeCapture(input) {
   const selectedText = cleanText(input.selectedText);
 
@@ -35,7 +67,7 @@ function storeCapture(input) {
     selectionMethod: input.selectionMethod
   };
 
-  chrome.storage.local.set({ pendingCapture: capture }).catch(() => {});
+  safeLocalSet({ pendingCapture: capture });
   return capture;
 }
 
@@ -100,24 +132,28 @@ window.addEventListener("blur", () => {
   void captureCopySelection();
 }, true);
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type !== "atlas:capture-selection") {
-    return false;
-  }
+try {
+  chrome?.runtime?.onMessage?.addListener((message, _sender, sendResponse) => {
+    if (message?.type !== "atlas:capture-selection") {
+      return false;
+    }
 
-  captureCopySelection()
-    .then((result) => {
-      const capture = result?.capture || null;
-      sendResponse({ ok: Boolean(capture), capture, copied: Boolean(result?.copied) });
-    })
-    .catch(() => sendResponse({ ok: false, capture: null }));
-  return true;
-});
+    captureCopySelection()
+      .then((result) => {
+        const capture = result?.capture || null;
+        sendResponse({ ok: Boolean(capture), capture, copied: Boolean(result?.copied) });
+      })
+      .catch(() => sendResponse({ ok: false, capture: null }));
+    return true;
+  });
+} catch {
+  // Existing pages can retain stale content scripts after the extension reloads.
+}
 
-chrome.storage.local.get(["pendingCapture"]).then((stored) => {
+safeLocalGet(["pendingCapture"]).then((stored) => {
   const capturedAt = stored.pendingCapture?.capturedAt ? Date.parse(stored.pendingCapture.capturedAt) : 0;
 
   if (capturedAt && Date.now() - capturedAt > CAPTURE_MAX_AGE_MS) {
-    chrome.storage.local.remove(["pendingCapture"]).catch(() => {});
+    safeLocalRemove(["pendingCapture"]);
   }
 }).catch(() => {});
