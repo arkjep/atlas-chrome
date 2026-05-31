@@ -1,4 +1,5 @@
 const DEFAULT_API_BASE_URL = "https://atlas-api.arktechnology.dev";
+const ATLAS_LOGO_URL = "assets/logo.png";
 const clientButton = document.querySelector("#client-button");
 const clientIcon = document.querySelector("#client-icon");
 const clientName = document.querySelector("#client-name");
@@ -40,7 +41,7 @@ async function activeTab() {
 }
 
 function clientInitials(client) {
-  return String(client?.name || "No client")
+  return String(client?.name || "Atlas")
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, 2)
@@ -51,13 +52,14 @@ function clientInitials(client) {
 function renderClient() {
   const client = clients[selectedClientIndex] || null;
   clientName.textContent = client ? client.name : "No client";
+  clientButton.title = client?.id ? `Client: ${client.name}` : "No client";
   clientIcon.style.background = client?.color || "#2f6fed";
   clientIcon.textContent = "";
 
-  if (client?.logoData) {
+  if (client?.logoData || !client?.id) {
     const img = document.createElement("img");
     img.alt = "";
-    img.src = client.logoData;
+    img.src = client?.logoData || ATLAS_LOGO_URL;
     clientIcon.append(img);
   } else {
     clientIcon.textContent = clientInitials(client);
@@ -81,7 +83,7 @@ async function loadClients() {
     throw new Error(body.error || `Unable to load clients: HTTP ${response.status}.`);
   }
 
-  clients = [{ id: null, name: "No client", color: "#536071" }, ...(body.clients || []).filter((client) => client.status !== "archived")];
+  clients = [{ id: null, name: "No client", color: "#111a24", logoData: ATLAS_LOGO_URL }, ...(body.clients || []).filter((client) => client.status !== "archived")];
   selectedClientIndex = Math.max(0, clients.findIndex((client) => client.id === settings.selectedClientId));
 
   if (selectedClientIndex < 0) {
@@ -208,7 +210,7 @@ zapButton.addEventListener("click", async () => {
 
 async function init() {
   settings = await storageGet(["apiBaseUrl", "authToken", "selectedClientId"]);
-  status.textContent = settings.authToken ? "" : "Set your API token in extension options.";
+  status.textContent = settings.authToken ? "" : "Set token in options.";
   await loadClients();
 }
 

@@ -5,7 +5,13 @@
   "version": "0.1.1",
   "action": {
     "default_popup": "popup.html",
+    "default_icon": {
+      "128": "assets/logo.png"
+    },
     "default_title": "Create ATLAS task from selection"
+  },
+  "icons": {
+    "128": "assets/logo.png"
   },
   "background": {
     "service_worker": "src/background.js"
