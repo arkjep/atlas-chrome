@@ -21,61 +21,67 @@ function topTitle() {
 }
 
 function storeCapture(input) {
-  if (!input.selectedText) {
-    return;
+  const selectedText = cleanText(input.selectedText);
+
+  if (!selectedText) {
+    return null;
   }
 
-  chrome.storage.local.set({
-    pendingCapture: {
-      selectedText: input.selectedText,
-      pageTitle: input.pageTitle || topTitle(),
-      url: input.url || topUrl(),
-      capturedAt: new Date().toISOString(),
-      selectionMethod: input.selectionMethod
-    }
-  }).catch(() => {});
+  const capture = {
+    selectedText,
+    pageTitle: input.pageTitle || topTitle(),
+    url: input.url || topUrl(),
+    capturedAt: new Date().toISOString(),
+    selectionMethod: input.selectionMethod
+  };
+
+  chrome.storage.local.set({ pendingCapture: capture }).catch(() => {});
+  return capture;
 }
 
 function captureDomSelection() {
   const selectedText = cleanText(window.getSelection()?.toString());
 
   if (!selectedText) {
-    return false;
+    return null;
   }
 
-  storeCapture({
+  return storeCapture({
     selectedText,
     selectionMethod: "dom"
   });
-  return true;
 }
 
 async function captureCopySelection() {
-  if (captureDomSelection()) {
-    return true;
+  const domCapture = captureDomSelection();
+
+  if (domCapture) {
+    return { capture: domCapture, copied: false };
   }
 
   try {
     const copied = document.execCommand("copy");
 
     if (!copied) {
-      return false;
+      return { capture: null, copied: false };
     }
 
     await new Promise((resolve) => setTimeout(resolve, 40));
-    const selectedText = cleanText(await navigator.clipboard.readText());
+    const selectedText = cleanText(await navigator.clipboard.readText().catch(() => ""));
 
     if (!selectedText) {
-      return false;
+      return { capture: null, copied: true };
     }
 
-    storeCapture({
-      selectedText,
-      selectionMethod: "clipboard"
-    });
-    return true;
+    return {
+      capture: storeCapture({
+        selectedText,
+        selectionMethod: "clipboard"
+      }),
+      copied: true
+    };
   } catch {
-    return false;
+    return { capture: null, copied: false };
   }
 }
 
@@ -100,8 +106,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   captureCopySelection()
-    .then((ok) => sendResponse({ ok }))
-    .catch(() => sendResponse({ ok: false }));
+    .then((result) => {
+      const capture = result?.capture || null;
+      sendResponse({ ok: Boolean(capture), capture, copied: Boolean(result?.copied) });
+    })
+    .catch(() => sendResponse({ ok: false, capture: null }));
   return true;
 });
 

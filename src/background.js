@@ -26,3 +26,12 @@ chrome.runtime.onInstalled.addListener((details) => {
 chrome.action.onClicked.addListener(async (tab) => {
   await openTaskPopup();
 });
+
+chrome.runtime.onMessage.addListener((message) => {
+  if (message?.type !== "atlas:debug-log") {
+    return false;
+  }
+
+  console.log("[ATLAS] Capture debug", message.payload);
+  return false;
+});
