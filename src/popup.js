@@ -1,5 +1,7 @@
 const DEFAULT_API_BASE_URL = "https://atlas-api.arktechnology.dev";
 const ATLAS_LOGO_URL = "assets/logo.png";
+const CAPTURE_MAX_AGE_MS = 2 * 60 * 1000;
+const CLIPBOARD_COPY_TIMEOUT_MS = 400;
 const clientButton = document.querySelector("#client-button");
 const clientIcon = document.querySelector("#client-icon");
 const clientName = document.querySelector("#client-name");
@@ -18,6 +20,26 @@ function normalizeApiBaseUrl(value) {
 
 function cleanText(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+async function readClipboardText() {
+  return cleanText(await navigator.clipboard.readText().catch(() => ""));
+}
+
+async function waitForClipboardChange(previousText) {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < CLIPBOARD_COPY_TIMEOUT_MS) {
+    const text = await readClipboardText();
+
+    if (text && text !== previousText) {
+      return text;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 40));
+  }
+
+  return "";
 }
 
 function storageGet(keys) {
@@ -59,6 +81,7 @@ async function requestInjectedCapture(tab = null) {
   }
 
   try {
+    const previousClipboardText = await readClipboardText();
     const results = await chrome.scripting.executeScript({
       target: { tabId: tab.id, allFrames: true },
       func: () => {
@@ -78,14 +101,58 @@ async function requestInjectedCapture(tab = null) {
           };
         }
 
+        let copyEventText = "";
+        const captureCopyEventText = (event) => {
+          copyEventText = cleanText(event.clipboardData?.getData("text/plain"));
+        };
+
+        let copied = false;
+        document.addEventListener("copy", captureCopyEventText, false);
+        window.addEventListener("copy", captureCopyEventText, false);
+        try {
+          copied = Boolean(document.execCommand?.("copy"));
+        } finally {
+          document.removeEventListener("copy", captureCopyEventText, false);
+          window.removeEventListener("copy", captureCopyEventText, false);
+        }
+
         return {
           capture: null,
-          copied: Boolean(document.execCommand?.("copy"))
+          copied,
+          copyEventText
         };
       }
     });
 
-    return results.map((result) => result.result).find((result) => result?.capture || result?.copied) || null;
+    const domResult = results.map((result) => result.result).find((result) => result?.capture);
+
+    if (domResult?.capture) {
+      return domResult;
+    }
+
+    const copied = results.some((result) => result.result?.copied);
+
+    if (!copied) {
+      return null;
+    }
+
+    const copyEventResult = results.map((result) => result.result).find((result) => result?.copyEventText);
+
+    if (copyEventResult?.copyEventText) {
+      return {
+        capture: captureFromClipboard(copyEventResult.copyEventText, tab, "injected-copy-event"),
+        copied: true,
+        clipboardChanged: true
+      };
+    }
+
+    const selectedText = await waitForClipboardChange(previousClipboardText);
+
+    return {
+      capture: selectedText ? captureFromClipboard(selectedText, tab, "injected-clipboard") : null,
+      copied: true,
+      clipboardChanged: Boolean(selectedText)
+    };
   } catch {
     return null;
   }
@@ -121,7 +188,21 @@ function isUsableCapture(capture, tab = null) {
   return Boolean(selectedText && !isProbablyPageMetadata(selectedText, tab, capture));
 }
 
-function captureFromClipboard(text, tab = null) {
+function isRecentCapture(capture) {
+  const capturedAt = capture?.capturedAt ? Date.parse(capture.capturedAt) : 0;
+
+  return Boolean(capturedAt && Date.now() - capturedAt <= CAPTURE_MAX_AGE_MS);
+}
+
+function isCurrentTabCapture(capture, tab = null) {
+  return Boolean(!tab?.url || !capture?.url || capture.url === tab.url);
+}
+
+function isReusableCapture(capture, tab = null) {
+  return Boolean(isUsableCapture(capture, tab) && isRecentCapture(capture) && isCurrentTabCapture(capture, tab));
+}
+
+function captureFromClipboard(text, tab = null, selectionMethod = "extension-clipboard") {
   const selectedText = cleanText(text);
 
   if (!selectedText || isProbablyPageMetadata(selectedText, tab)) {
@@ -129,18 +210,17 @@ function captureFromClipboard(text, tab = null) {
   }
 
   return {
-    ...(pendingCapture || {}),
-    pageTitle: pendingCapture?.pageTitle || tab?.title || "",
-    url: pendingCapture?.url || tab?.url || "",
+    pageTitle: tab?.title || "",
+    url: tab?.url || "",
     selectedText,
     capturedAt: new Date().toISOString(),
-    selectionMethod: "extension-clipboard"
+    selectionMethod
   };
 }
 
 async function readClipboardCapture(tab = null) {
   try {
-    return captureFromClipboard(await navigator.clipboard.readText(), tab);
+    return captureFromClipboard(await readClipboardText(), tab);
   } catch {
     return null;
   }
@@ -159,6 +239,7 @@ async function refreshPendingCapture() {
   logCaptureDebug("fresh-capture-response", {
     captureSource,
     copied: Boolean(response?.copied),
+    clipboardChanged: Boolean(response?.clipboardChanged),
     responseText: response?.capture?.selectedText || "",
     responseMethod: response?.capture?.selectionMethod || "",
     tabTitle: tab?.title || "",
@@ -170,7 +251,7 @@ async function refreshPendingCapture() {
     return pendingCapture;
   }
 
-  if (response?.copied) {
+  if (response?.copied && response?.clipboardChanged !== false) {
     const clipboardCapture = await readClipboardCapture(tab);
 
     if (clipboardCapture) {
@@ -197,11 +278,13 @@ async function refreshPendingCapture() {
   const local = await localStorageGet(["pendingCapture"]);
   pendingCapture = local.pendingCapture || pendingCapture;
 
-  if (isUsableCapture(pendingCapture, tab)) {
+  if (isReusableCapture(pendingCapture, tab)) {
     return pendingCapture;
   }
 
-  return pendingCapture;
+  pendingCapture = null;
+  await localStorageRemove(["pendingCapture"]);
+  return null;
 }
 
 async function rememberLastResult(result) {

@@ -1,4 +1,5 @@
 const CAPTURE_MAX_AGE_MS = 2 * 60 * 1000;
+const CLIPBOARD_COPY_TIMEOUT_MS = 400;
 
 function cleanText(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
@@ -84,25 +85,65 @@ function captureDomSelection() {
   });
 }
 
+async function readClipboardText() {
+  return cleanText(await navigator.clipboard.readText().catch(() => ""));
+}
+
+async function waitForClipboardChange(previousText) {
+  const startedAt = Date.now();
+
+  while (Date.now() - startedAt < CLIPBOARD_COPY_TIMEOUT_MS) {
+    const selectedText = await readClipboardText();
+
+    if (selectedText && selectedText !== previousText) {
+      return selectedText;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 40));
+  }
+
+  return "";
+}
+
 async function captureCopySelection() {
   const domCapture = captureDomSelection();
 
   if (domCapture) {
-    return { capture: domCapture, copied: false };
+    return { capture: domCapture, copied: false, clipboardChanged: false };
   }
 
+  let copyEventText = "";
+  const captureCopyEventText = (event) => {
+    copyEventText = cleanText(event.clipboardData?.getData("text/plain"));
+  };
+
   try {
+    const previousClipboardText = await readClipboardText();
+    document.addEventListener("copy", captureCopyEventText, false);
+    window.addEventListener("copy", captureCopyEventText, false);
     const copied = document.execCommand("copy");
+    document.removeEventListener("copy", captureCopyEventText, false);
+    window.removeEventListener("copy", captureCopyEventText, false);
 
     if (!copied) {
-      return { capture: null, copied: false };
+      return { capture: null, copied: false, clipboardChanged: false };
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 40));
-    const selectedText = cleanText(await navigator.clipboard.readText().catch(() => ""));
+    if (copyEventText) {
+      return {
+        capture: storeCapture({
+          selectedText: copyEventText,
+          selectionMethod: "copy-event"
+        }),
+        copied: true,
+        clipboardChanged: true
+      };
+    }
+
+    const selectedText = await waitForClipboardChange(previousClipboardText);
 
     if (!selectedText) {
-      return { capture: null, copied: true };
+      return { capture: null, copied: true, clipboardChanged: false };
     }
 
     return {
@@ -110,10 +151,13 @@ async function captureCopySelection() {
         selectedText,
         selectionMethod: "clipboard"
       }),
-      copied: true
+      copied: true,
+      clipboardChanged: true
     };
   } catch {
-    return { capture: null, copied: false };
+    document.removeEventListener("copy", captureCopyEventText, false);
+    window.removeEventListener("copy", captureCopyEventText, false);
+    return { capture: null, copied: false, clipboardChanged: false };
   }
 }
 
@@ -141,7 +185,12 @@ try {
     captureCopySelection()
       .then((result) => {
         const capture = result?.capture || null;
-        sendResponse({ ok: Boolean(capture), capture, copied: Boolean(result?.copied) });
+        sendResponse({
+          ok: Boolean(capture),
+          capture,
+          copied: Boolean(result?.copied),
+          clipboardChanged: Boolean(result?.clipboardChanged)
+        });
       })
       .catch(() => sendResponse({ ok: false, capture: null }));
     return true;
